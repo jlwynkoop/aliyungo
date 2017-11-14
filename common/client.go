@@ -183,6 +183,33 @@ func (client *Client) Invoke(action string, args interface{}, response interface
 	return nil
 }
 
+// formatRequest generates ascii representation of a request
+func formatRequest(r *http.Request) string {
+ // Create return string
+ var request []string
+ // Add the request string
+ url := fmt.Sprintf(“%v %v %v”, r.Method, r.URL, r.Proto)
+ request = append(request, url)
+ // Add the host
+ request = append(request, fmt.Sprintf(“Host: %v”, r.Host))
+ // Loop through headers
+ for name, headers := range r.Header {
+   name = strings.ToLower(name)
+   for _, h := range headers {
+     request = append(request, fmt.Sprintf(“%v: %v”, name, h))
+   }
+ }
+ 
+ // If this is a POST, add post data
+ if r.Method == “POST” {
+    r.ParseForm()
+    request = append(request, “\n”)
+    request = append(request, r.Form.Encode())
+ } 
+  // Return the request as a string
+  return strings.Join(request, “\n”)
+}
+
 // Invoke sends the raw HTTP request for ECS services
 func (client *Client) InvokeByFlattenMethod(action string, args interface{}, response interface{}) error {
 
@@ -200,7 +227,7 @@ func (client *Client) InvokeByFlattenMethod(action string, args interface{}, res
 	requestURL := client.endpoint + "?" + query.Encode() + "&Signature=" + url.QueryEscape(signature)
 
 	httpReq, err := http.NewRequest(ECSRequestMethod, requestURL, nil)
-
+               
 	if err != nil {
 		return GetClientError(err)
 	}
@@ -209,6 +236,14 @@ func (client *Client) InvokeByFlattenMethod(action string, args interface{}, res
 	httpReq.Header.Set("X-SDK-Client", `AliyunGO/`+Version+client.businessInfo)
 
 	httpReq.Header.Set("User-Agent", httpReq.UserAgent()+ " " +client.userAgent)
+
+        // Buffer the body
+        bodyBuffer, _ := ioutil.ReadAll(httpReq.Body)
+        // Put the body back for FormatRequest to read it
+        httpReq.Body = myReader{bytes.NewBuffer(buf)}
+        fmt.Printf("--> %s\n\n", formatRequest(req))
+        // Put it back before you call client.Do()
+        httpReq.Body = myReader{bytes.NewBuffer(buf)}
 
 	t0 := time.Now()
 	httpResp, err := client.httpClient.Do(httpReq)
